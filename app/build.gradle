@@ -25,6 +25,6 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
     compile 'com.android.support:appcompat-v7:25.3.1'
+    compile 'org.jsoup:jsoup:1.10.3'
     testCompile 'junit:junit:4.12'
-    compile files('libs/jsoup-1.10.3.jar')
 }
