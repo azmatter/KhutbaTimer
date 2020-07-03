@@ -1,20 +1,20 @@
-package com.iar.mtohmaz.khutbatimer;
+package com.iar.mtohmaz.khutbatimer_15min;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.os.CountDownTimer;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.view.View;
 import android.widget.TextView;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.select.Elements;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.select.Elements;
 
 public class MainActivity extends Activity {
 
@@ -165,7 +165,7 @@ public class MainActivity extends Activity {
 
         if (timer == null) {
             text1.setText(shift + " Shift");
-            timer = new CountDownTimer(1800000, 1000) {
+            timer = new CountDownTimer(900000, 1000) {
 
                 boolean blink = true;
                 public void onTick(long millisUntilFinished) {

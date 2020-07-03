@@ -1,4 +1,4 @@
-package com.iar.mtohmaz.khutbatimer;
+package com.iar.mtohmaz.khutbatimer_15min;
 
 import org.junit.Test;
 
