@@ -1,4 +1,4 @@
-package com.iar.mtohmaz.khutbatimer;
+package com.iar.mtohmaz.khutbatimer_20min;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;

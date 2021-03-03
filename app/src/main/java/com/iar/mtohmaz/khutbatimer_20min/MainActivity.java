@@ -1,10 +1,10 @@
-package com.iar.mtohmaz.khutbatimer;
+package com.iar.mtohmaz.khutbatimer_20min;
 
 import android.app.Activity;
 import android.content.Intent;
 import android.os.CountDownTimer;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
@@ -13,8 +13,10 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 import org.jsoup.Jsoup;
+import org.jsoup.helper.StringUtil;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
+import org.apache.commons.lang3.StringUtils;
 
 public class MainActivity extends Activity {
 
@@ -54,28 +56,67 @@ public class MainActivity extends Activity {
     }
 
     private String[] getKhutbaTimes() {
+        String TAG = "getKhutbaTimes()";
 
-        String shiftTimes[] = new String[3];
+        String shiftTimes[] = new String[4];
         try {
             Document doc = Jsoup.connect("http://www.raleighmasjid.org").get();
+            if(doc == null)
+                Log.e(TAG,"Unable to reach website");
             Elements list = doc.getElementsByClass("time");
-            int firstHour = Integer.parseInt(list.get(0).text().substring(7, 9).replaceAll(":", ""));
+            // Shift 1
+            String Time1 = StringUtils.right(list.get(0).text(),5).trim();
+            int firstHour = Integer.parseInt(Time1.substring(0,2).replaceAll(":",""));
             firstHour = convertTo24Hour(firstHour);
-            String firstMinute = list.get(0).text().substring(9, 12).replaceAll(":", "");
-            int secondHour = Integer.parseInt(list.get(1).text().substring(7, 9).replaceAll(":", ""));
+            String firstMinute = StringUtils.right(Time1,2);
+            Log.d(TAG,"1st Shift: " + firstHour + firstMinute);
+
+            // Shift 2
+            String Time2 = StringUtils.right(list.get(1).text(),5).trim();
+            int secondHour = Integer.parseInt(Time2.substring(0,2).replaceAll(":",""));
             secondHour = convertTo24Hour(secondHour);
-            String secondMinute = list.get(1).text().substring(9, 12).replaceAll("\\s+","");
-            int thirdHour = Integer.parseInt(list.get(2).text().substring(7, 9).replaceAll(":", ""));
+            String secondMinute = StringUtils.right(Time2,2);
+            Log.d(TAG,"2nd Shift: " + secondHour + secondMinute);
+
+            // Shift 3
+            String Time3 = StringUtils.right(list.get(2).text(),5).trim();
+            int thirdHour = Integer.parseInt(Time3.substring(0,1).replaceAll(":",""));
             thirdHour = convertTo24Hour(thirdHour);
-            String thirdMinute = list.get(2).text().substring(9, 12).replaceAll("\\s+", "");
+            String thirdMinute = StringUtils.right(Time3,2);
+            Log.d(TAG,"3rd Shift: " + thirdHour + thirdMinute);
+
+
+            // Shift 4
+            String Time4 = StringUtils.right(list.get(3).text(),5).trim();
+            int fourthHour = Integer.parseInt(Time4.substring(0,2).replaceAll(":",""));
+            fourthHour = convertTo24Hour(fourthHour);
+            String fourthMinute = StringUtils.right(Time4,2);
+            Log.d(TAG,"4th Shift: " + fourthHour + fourthMinute);
+
             shiftTimes[0] = firstHour + ":" + firstMinute;
             shiftTimes[1] = secondHour + ":" + secondMinute;
             shiftTimes[2] = thirdHour + ":" + thirdMinute;
+            shiftTimes[3] = fourthHour + ":" + fourthMinute;
+
         } catch (Exception e) {
             shiftTimes = null;
+            Log.e(TAG,e.toString());
             e.printStackTrace();
         }
         return shiftTimes;
+    }
+
+    /*
+        Provides hardcoded times as backup in case getKhutbaTimes() is unable to read the IAR website.
+        Adjust the number of shifts accordingly.
+     */
+    private String[] getHardcodedKhutbaTimes() {
+        String goodTimes[] = new String[4];
+        goodTimes[0] = "11:00";
+        goodTimes[1] = "12:00";
+        goodTimes[2] = "13:00";
+        goodTimes[3] = "15:15";
+        return goodTimes;
     }
 
     private void launchThread() {
@@ -98,6 +139,11 @@ public class MainActivity extends Activity {
                             if (times != null) {
                                 shiftTimes = times;
                             }
+                            else {  // need an else case.. if unable to get times for website, then use hardcoded times
+                                shiftTimes = getHardcodedKhutbaTimes();
+                                Log.e("MainActivity:run()", "JSoup unable to retrieve times, using hardcoded times");
+                            }
+
                             SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
                             String currentTime = sdf.format(new Date());
 
@@ -111,8 +157,12 @@ public class MainActivity extends Activity {
                                         shift = "Second";
                                         nextShift = "Next shift at " + convertTo12Hour(shiftTimes[2]);
                                     }
-                                    else {
+                                    else if (i == 2 ){
                                         shift = "Third";
+                                        nextShift = "Next shift at " + convertTo12Hour(shiftTimes[3]);
+                                    }
+                                    else {
+                                        shift = "Fourth";
                                         nextShift = "Khateeb Timer";
                                     }
                                     runOnUiThread(new Runnable() {
@@ -162,10 +212,15 @@ public class MainActivity extends Activity {
 
 
     private void startTimer() {
+/*
+    30 mins = 1800000 ms
+    20 mins = 1200000 ms
+    15 mins = 900000 ms
+ */
 
         if (timer == null) {
             text1.setText(shift + " Shift");
-            timer = new CountDownTimer(1800000, 1000) {
+            timer = new CountDownTimer(1200000, 1000) {
 
                 boolean blink = true;
                 public void onTick(long millisUntilFinished) {
