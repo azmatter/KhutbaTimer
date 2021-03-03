@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
         goodTimes[0] = "11:00";
         goodTimes[1] = "12:00";
         goodTimes[2] = "13:00";
-        goodTimes[3] = "15:15";
+        goodTimes[3] = "14:15";
         return goodTimes;
     }
 
