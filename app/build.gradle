@@ -4,7 +4,7 @@ android {
     compileSdkVersion 25
     buildToolsVersion "25.0.2"
     defaultConfig {
-        applicationId "com.iar.mtohmaz.khutbatimer"
+        applicationId "com.iar.mtohmaz.khutbatimer_20min"
         minSdkVersion 23
         targetSdkVersion 25
         versionCode 1
@@ -26,5 +26,6 @@ dependencies {
     })
     compile 'com.android.support:appcompat-v7:25.3.1'
     compile 'org.jsoup:jsoup:1.10.3'
+    compile 'org.apache.commons:commons-lang3:3.0'
     testCompile 'junit:junit:4.12'
 }
