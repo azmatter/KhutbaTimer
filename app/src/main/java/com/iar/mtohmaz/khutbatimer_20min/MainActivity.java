@@ -6,6 +6,7 @@ import android.os.CountDownTimer;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
@@ -26,13 +27,17 @@ public class MainActivity extends Activity {
     private static final String FORMAT = "%02d:%02d";
     private String shift = "";
     private String nextShift = "";
+    private String lastSyncTime = "";
     TextView text1;
     TextView text2;
+    TextView text3;
     CountDownTimer timer = null;
     String shiftTimes[];
+    String TAG = "KhutbaTimer";
 
-    int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME05=300000, TIME01=60000, TIME5sec=5000;
-    int COUNTDOWN_TIME_MS = TIME20;
+    int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME10=600000, TIME05=305000, TIME01=60000, TIME5sec=5000;
+    final int TIMER_COUNTDOWN_LENGTH = TIME20;
+    final String MASJID_KHUTBA_TIMES_URL = "http://www.raleighmasjid.org/m";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -45,35 +50,39 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(R.layout.activity_main);
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         text1 = (TextView)findViewById(R.id.textView1);
 
         text2 = (TextView)findViewById(R.id.textView2);
+        text3 = (TextView)findViewById(R.id.textView3);
 
-        setDisplay();
+        setDisplay("","Khateeb Timer");
 
         launchThread();
     }
 
-    private void setDisplay() {
-        text2.setText("");
-        text1.setText("Khateeb Timer");
+    private void setDisplay(String txt_timer, String txt_sub) {
+        text2.setText(txt_timer);
+        text1.setText(txt_sub);
     }
 
     private String[] getKhutbaTimesFromWeb() {
 
-        String TAG = "getKhutbaTimesFromWeb";
+        TAG = "getKhutbaTimesFromWeb";
         String shiftTimes[] = null;
 
         try {
-            Document doc = Jsoup.connect("http://www.raleighmasjid.org/m").get();
+            Document doc = Jsoup.connect(MASJID_KHUTBA_TIMES_URL).get();
             Elements list = doc.getElementsByClass("time");
 
             shiftTimes = new String[list.size()];
             for (int i = 0; i < list.size(); i++) {
                 String token = StringUtils.right(list.get(i).text(), 5).trim();
                 String temp[] = token.split(":", 2);
-                String  tempHour = temp[0],
-                        tempMin = temp[1];
+                String  tempHour = "" + temp[0],
+                        tempMin = "" + temp[1];
                 Log.d(TAG, "Shift " + (i+1) + ": " + tempHour + tempMin);
                 shiftTimes[i] = convertTo24Hour(Integer.parseInt(tempHour)) + ":" + tempMin;
             }
@@ -112,11 +121,16 @@ public class MainActivity extends Activity {
                     String times[] = getKhutbaTimesFromWeb();
                     if (times != null) {
                         shiftTimes = times;
+                        lastSyncTime = "Khutbah times last retrieved: " + Calendar.getInstance().getTime();
+//                        setDisplay("","Next shift Friday at " + convertTo12Hour(shiftTimes[0]));
+                        text3.setText(lastSyncTime);
                     }
                     else {  // if unable to get times from website, then use stored or hardcoded times
                         shiftTimes = getExistingKhutbaTimes();
+                        text3.setText("IAR site not reachable, using backup times");
                         Log.e("onStart():", "JSoup unable to retrieve times from web, using hardcoded times "+ Arrays.toString(shiftTimes));
                     }
+
                 }
                 catch (Exception e){
                     Log.e("onStart():",e.toString());
@@ -181,6 +195,8 @@ public class MainActivity extends Activity {
                             .getLaunchIntentForPackage(getBaseContext().getPackageName());
                     i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(i);
+                } catch (Exception e) {
+                    Log.e("launchThread","Ran into unknown exception: "+ e.toString());
                 }
             }
         };
@@ -188,7 +204,8 @@ public class MainActivity extends Activity {
         t.start();
     }
 
-    private void startFiveTimer() {
+    private void startSalahWarningTimer() {
+        Log.d("post-Timer", "TIMER COUNTDOWN EXPIRED!  Displaying Salah! for " + shift + " Shift");
         CountDownTimer fiveTime = new CountDownTimer(300000, 1000) {
             boolean blink = true;
             public void onTick(long millisUntilFinished) {
@@ -205,18 +222,19 @@ public class MainActivity extends Activity {
 
             public void onFinish() {
                 text2.setText("");
+                text3.setText(lastSyncTime);
             }
         }.start();
     }
 
 
     private void startTimer() {
-        Log.d("Timer:run()", "today is Friday and its time for khutbah shift");
-        Log.d("Timer:run()", "TIMER STARTED! Length="+ (COUNTDOWN_TIME_MS/60000) + "mins");
+        Log.d("startTimer", "TIMER COUNTDOWN STARTED! " + shift + " Shift, Mins="+ (TIMER_COUNTDOWN_LENGTH/60000));
 
         if (timer == null) {
             text1.setText(shift + " Shift");
-            timer = new CountDownTimer(COUNTDOWN_TIME_MS, 1000) {
+            text3.setText("");
+            timer = new CountDownTimer(TIMER_COUNTDOWN_LENGTH, 1000) {
 
                 boolean blink = true;
                 public void onTick(long millisUntilFinished) {
@@ -254,7 +272,7 @@ public class MainActivity extends Activity {
                 public void onFinish() {
                     timer = null;
                     text2.setTextColor(0xffffffff);
-                    startFiveTimer();
+                    startSalahWarningTimer();
                     shift = "";
                 }
             }.start();
