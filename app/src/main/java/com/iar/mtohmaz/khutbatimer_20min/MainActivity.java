@@ -9,8 +9,11 @@ import android.view.View;
 import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.jsoup.Jsoup;
 import org.jsoup.helper.StringUtil;
@@ -28,6 +31,9 @@ public class MainActivity extends Activity {
     CountDownTimer timer = null;
     String shiftTimes[];
 
+    int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME05=300000, TIME01=60000, TIME5sec=5000;
+    int COUNTDOWN_TIME_MS = TIME20;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
 
@@ -39,8 +45,6 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(R.layout.activity_main);
-
-
         text1 = (TextView)findViewById(R.id.textView1);
 
         text2 = (TextView)findViewById(R.id.textView2);
@@ -55,51 +59,27 @@ public class MainActivity extends Activity {
         text1.setText("Khateeb Timer");
     }
 
-    private String[] getKhutbaTimes() {
-        String TAG = "getKhutbaTimes()";
+    private String[] getKhutbaTimesFromWeb() {
 
-        String shiftTimes[] = new String[4];
+        String TAG = "getKhutbaTimesFromWeb";
+        String shiftTimes[] = null;
+
         try {
-            Document doc = Jsoup.connect("http://www.raleighmasjid.org").get();
-            if(doc == null)
-                Log.e(TAG,"Unable to reach website");
+            Document doc = Jsoup.connect("http://www.raleighmasjid.org/m").get();
             Elements list = doc.getElementsByClass("time");
-            // Shift 1
-            String Time1 = StringUtils.right(list.get(0).text(),5).trim();
-            int firstHour = Integer.parseInt(Time1.substring(0,2).replaceAll(":",""));
-            firstHour = convertTo24Hour(firstHour);
-            String firstMinute = StringUtils.right(Time1,2);
-            Log.d(TAG,"1st Shift: " + firstHour + firstMinute);
 
-            // Shift 2
-            String Time2 = StringUtils.right(list.get(1).text(),5).trim();
-            int secondHour = Integer.parseInt(Time2.substring(0,2).replaceAll(":",""));
-            secondHour = convertTo24Hour(secondHour);
-            String secondMinute = StringUtils.right(Time2,2);
-            Log.d(TAG,"2nd Shift: " + secondHour + secondMinute);
-
-            // Shift 3
-            String Time3 = StringUtils.right(list.get(2).text(),5).trim();
-            int thirdHour = Integer.parseInt(Time3.substring(0,1).replaceAll(":",""));
-            thirdHour = convertTo24Hour(thirdHour);
-            String thirdMinute = StringUtils.right(Time3,2);
-            Log.d(TAG,"3rd Shift: " + thirdHour + thirdMinute);
-
-
-            // Shift 4
-            String Time4 = StringUtils.right(list.get(3).text(),5).trim();
-            int fourthHour = Integer.parseInt(Time4.substring(0,2).replaceAll(":",""));
-            fourthHour = convertTo24Hour(fourthHour);
-            String fourthMinute = StringUtils.right(Time4,2);
-            Log.d(TAG,"4th Shift: " + fourthHour + fourthMinute);
-
-            shiftTimes[0] = firstHour + ":" + firstMinute;
-            shiftTimes[1] = secondHour + ":" + secondMinute;
-            shiftTimes[2] = thirdHour + ":" + thirdMinute;
-            shiftTimes[3] = fourthHour + ":" + fourthMinute;
+            shiftTimes = new String[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                String token = StringUtils.right(list.get(i).text(), 5).trim();
+                String temp[] = token.split(":", 2);
+                String  tempHour = temp[0],
+                        tempMin = temp[1];
+                Log.d(TAG, "Shift " + (i+1) + ": " + tempHour + tempMin);
+                shiftTimes[i] = convertTo24Hour(Integer.parseInt(tempHour)) + ":" + tempMin;
+            }
+            Log.i(TAG, "Retrieved " + shiftTimes.length + " shifts from website " + Arrays.toString(shiftTimes));
 
         } catch (Exception e) {
-            shiftTimes = null;
             Log.e(TAG,e.toString());
             e.printStackTrace();
         }
@@ -107,16 +87,44 @@ public class MainActivity extends Activity {
     }
 
     /*
-        Provides hardcoded times as backup in case getKhutbaTimes() is unable to read the IAR website.
+        Provides hardcoded times as backup in case getKhutbaTimesFromWeb() is unable to read the masjid website.
         Adjust the number of shifts accordingly.
      */
-    private String[] getHardcodedKhutbaTimes() {
-        String goodTimes[] = new String[4];
-        goodTimes[0] = "11:00";
-        goodTimes[1] = "12:00";
-        goodTimes[2] = "13:00";
-        goodTimes[3] = "14:15";
+    private String[] getExistingKhutbaTimes() {
+        final String[] goodTimes = {"11:00", "12:00", "13:00", "14:15"};
         return goodTimes;
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        /*
+            Retrieve Khutbah times from web only when activity is starting rather than constantly
+         */
+        Thread refreshTimes = new Thread (){
+            @Override
+            public void run() {
+                try{
+                    Calendar cal = Calendar.getInstance();
+                    cal.setTime(new Date());
+                    final boolean friday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY;
+                    String times[] = getKhutbaTimesFromWeb();
+                    if (times != null) {
+                        shiftTimes = times;
+                    }
+                    else {  // if unable to get times from website, then use stored or hardcoded times
+                        shiftTimes = getExistingKhutbaTimes();
+                        Log.e("onStart():", "JSoup unable to retrieve times from web, using hardcoded times "+ Arrays.toString(shiftTimes));
+                    }
+                }
+                catch (Exception e){
+                    Log.e("onStart():",e.toString());
+                }
+            }
+        };
+        refreshTimes.start();
+
     }
 
     private void launchThread() {
@@ -134,20 +142,11 @@ public class MainActivity extends Activity {
                         final boolean friday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY;
                         if (friday) {
 
-                            String times[] = getKhutbaTimes();
-
-                            if (times != null) {
-                                shiftTimes = times;
-                            }
-                            else {  // need an else case.. if unable to get times for website, then use hardcoded times
-                                shiftTimes = getHardcodedKhutbaTimes();
-                                Log.e("MainActivity:run()", "JSoup unable to retrieve times, using hardcoded times");
-                            }
-
                             SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
                             String currentTime = sdf.format(new Date());
 
                             for (int i = 0; i < shiftTimes.length; i++) {
+
                                 if (shiftTimes[i].equals(currentTime)) {
                                     if (i == 0) {
                                         shift = "First";
@@ -212,22 +211,22 @@ public class MainActivity extends Activity {
 
 
     private void startTimer() {
-/*
-    30 mins = 1800000 ms
-    20 mins = 1200000 ms
-    15 mins = 900000 ms
- */
+        Log.d("Timer:run()", "today is Friday and its time for khutbah shift");
+        Log.d("Timer:run()", "TIMER STARTED! Length="+ (COUNTDOWN_TIME_MS/60000) + "mins");
 
         if (timer == null) {
             text1.setText(shift + " Shift");
-            timer = new CountDownTimer(1200000, 1000) {
+            timer = new CountDownTimer(COUNTDOWN_TIME_MS, 1000) {
 
                 boolean blink = true;
                 public void onTick(long millisUntilFinished) {
+
+                    // When 5 mins remaining, turn time text red
                     if (millisUntilFinished <= 300000) {
                         text2.setTextColor(0xffff0000);
                     }
 
+                    // When 1 min remaining, blink time text
                     if (millisUntilFinished <= 60000) {
                         if (blink) {
                             text2.setText("" + String.format(FORMAT,
