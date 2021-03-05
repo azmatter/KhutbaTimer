@@ -1,28 +1,33 @@
 package com.iar.mtohmaz.khutbatimer_20min;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.CountDownTimer;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.PopupMenu;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.jsoup.Jsoup;
-import org.jsoup.helper.StringUtil;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
 import org.apache.commons.lang3.StringUtils;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickListener{
 
     private static final String FORMAT = "%02d:%02d";
     private String shift = "";
@@ -31,12 +36,14 @@ public class MainActivity extends Activity {
     TextView text1;
     TextView text2;
     TextView text3;
+    Button menuButton;
+    PopupMenu popupMenu;
     CountDownTimer timer = null;
     String shiftTimes[];
     String TAG = "KhutbaTimer";
 
-    int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME10=600000, TIME05=305000, TIME01=60000, TIME5sec=5000;
-    final int TIMER_COUNTDOWN_LENGTH = TIME20;
+    final int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME10=600000, TIME05=305000, TIME01=60000, TIME5sec=5000;
+    int TIMER_COUNTDOWN_LENGTH = TIME20;    //default timeout
     final String MASJID_KHUTBA_TIMES_URL = "http://www.raleighmasjid.org/m";
 
     @Override
@@ -54,9 +61,20 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         text1 = (TextView)findViewById(R.id.textView1);
-
         text2 = (TextView)findViewById(R.id.textView2);
         text3 = (TextView)findViewById(R.id.textView3);
+        menuButton = (Button)findViewById(R.id.menuButton);
+        menuButton.setBackgroundColor(Color.TRANSPARENT);
+        menuButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                popupMenu = new PopupMenu(MainActivity.this, v);
+                popupMenu.setOnMenuItemClickListener(MainActivity.this);
+                popupMenu.inflate(R.menu.app_menu);
+                popupMenu.show();
+            }
+        });
 
         setDisplay("","Khateeb Timer");
 
@@ -206,7 +224,7 @@ public class MainActivity extends Activity {
 
     private void startSalahWarningTimer() {
         Log.d("post-Timer", "TIMER COUNTDOWN EXPIRED!  Displaying Salah! for " + shift + " Shift");
-        CountDownTimer fiveTime = new CountDownTimer(300000, 1000) {
+        CountDownTimer fiveTime = new CountDownTimer(TIME05, 1000) {
             boolean blink = true;
             public void onTick(long millisUntilFinished) {
                 if (blink) {
@@ -298,6 +316,54 @@ public class MainActivity extends Activity {
             e.printStackTrace();
         }
         return ret;
+    }
+
+    @Override
+    public boolean onMenuItemClick(MenuItem menuItem) {
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this);
+        String message = "";
+
+        switch(menuItem.getItemId()){
+            case R.id.viewTimes:
+                dialog.setTitle("View Khutbah Times");
+                if(shiftTimes==null){   //error scenario
+                    message+="There are no stored times";
+                }
+                else {
+                    message="";
+                    for(int i=0;i<shiftTimes.length;i++){
+                        message+="Shift " + (i+1) + ": " + shiftTimes[i] + "\n";
+                    }
+                    if(lastSyncTime.equals(""))
+                        message="Last web sync unsuccessful. Using default times\n\n"+message;
+                    else message+="\nLast Sync to web: "+lastSyncTime;
+                }
+
+                dialog.setMessage(message);
+                dialog.setNegativeButton("OK", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {} });
+                dialog.show();
+                return true;
+            case R.id.timerLength:
+                dialog.setTitle("Timer Length");
+                message = "Current Countdown (mins): "+ (TIMER_COUNTDOWN_LENGTH/60000);
+                final EditText edittext = new EditText(this);
+                dialog.setMessage(message);
+                dialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                    } });
+                /*
+                dialog.setPositiveButton("Set New Countdown", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                    } });
+                dialog.setView(edittext);
+                */
+                dialog.show();
+                return true;
+            case R.id.sync:
+                Toast.makeText(this, "Trying to sync times from website...", Toast.LENGTH_SHORT).show();
+        }
+        return false;
     }
 }
 

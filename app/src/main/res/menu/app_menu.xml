@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/viewTimes"
+        android:icon="@android:drawable/ic_menu_view"
+        android:title="View Times" ></item>
+    <item
+        android:id="@+id/timerLength"
+        android:title="Timer Length" />
+    <item
+        android:id="@+id/sync"
+        android:title="Sync"
+        android:visible="false" />
+
+</menu>
