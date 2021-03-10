@@ -5,13 +5,11 @@
     <item
         android:id="@+id/viewTimes"
         android:icon="@android:drawable/ic_menu_view"
-        android:title="View Times" ></item>
+        android:title="View Khutba Times" ></item>
     <item
         android:id="@+id/timerLength"
-        android:title="Timer Length" />
+        android:title="Khutba Timer Length" />
     <item
-        android:id="@+id/sync"
-        android:title="Sync"
-        android:visible="false" />
-
+        android:id="@+id/exit"
+        android:title="Quit" />
 </menu>

@@ -1,9 +1,10 @@
-package com.iar.mtohmaz.khutbatimer_20min;
+package com.iar.mtohmaz.khutbatimer;
 
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.CountDownTimer;
 import android.os.Bundle;
@@ -44,7 +45,7 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
     String TAG = "KhutbaTimer";
 
     static final int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME10=600000, TIME05=305000, TIME01=60000, TIME5sec=5000;
-    final int TIMER_COUNTDOWN_LENGTH = TIME20;    //default timeout
+    int TIMER_COUNTDOWN_LENGTH;
     final String MASJID_KHUTBA_TIMES_URL = "http://www.raleighmasjid.org/m";
     final boolean testing = false;
 
@@ -79,13 +80,106 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
         });
 
         setDisplay("","Khateeb Timer");
-        updateKhutbahTimes();
+
+        TIMER_COUNTDOWN_LENGTH = getTIMER_COUNTDOWN_LENGTH();
+
+        lastSyncTime = getLastSyncTime();
+
+        refreshKhutbahTimes();
 
     }
 
     private void setDisplay(String txt_timer, String txt_sub) {
         text2.setText(txt_timer);
         text1.setText(txt_sub);
+    }
+
+    public String getLastSyncTime(){
+        TAG = "getLastSyncTime";
+        SharedPreferences sharedPreferences = getPreferences(MODE_PRIVATE);
+        String ret = sharedPreferences.getString("lastSyncTime","");
+        Log.i(TAG,"stored lastSyncTime="+ret);
+        return ret;
+    }
+
+    // This is where the default timer countdown length will be initialized.
+    public int getTIMER_COUNTDOWN_LENGTH(){
+        TAG = "getTimerLength";
+        SharedPreferences sharedPreferences = getPreferences(MODE_PRIVATE);
+        int ret = sharedPreferences.getInt("countdownLength",TIME20);
+        Log.i(TAG,"stored countdownLength: " + ret);
+        return ret;
+    }
+
+    public void setNewTIMER_COUNTDOWN_LENGTH(int newMins){
+        TAG = "setNewTimerLength";
+        int newTime = newMins*60000;
+        Log.i(TAG, "oldLength=" + this.TIMER_COUNTDOWN_LENGTH/60000 + ", newLength="+newMins);
+
+        // update instance variable
+        this.TIMER_COUNTDOWN_LENGTH = newTime;
+
+        // update shared prefs
+        SharedPreferences sharedPreferences = getPreferences(MODE_PRIVATE);
+        SharedPreferences.Editor sp = sharedPreferences.edit();
+        sp.putInt("countdownLength",newTime);
+        sp.apply();
+    }
+
+    private void storeTimesLocally(String [] times, String lastSyncTime){
+        TAG = "storeTimesLocally";
+        SharedPreferences sharedPreferences = getPreferences(MODE_PRIVATE);
+        SharedPreferences.Editor sp = sharedPreferences.edit();
+        StringBuilder sb = new StringBuilder();
+
+        // Store the # shifts
+        sp.putInt("numShifts",times.length);
+
+        // store the shift times as one string
+        for(int i =0;i<times.length;i++){
+            sb.append(times[i]).append(",");
+        }
+        sp.putString("shiftTimes",sb.toString());
+        Log.d(TAG,"putString: "+ sb.toString());
+
+        // store the lastSyncTime
+        sp.putString("lastSyncTime",lastSyncTime);
+
+        boolean tf = sp.commit();
+        if(tf)
+            Log.i(TAG,"Successfull wrote times to sharedPreferences");
+        else Log.e(TAG, "Error while writing times to sharedPreferences");
+
+    }
+
+    /*
+        Provides hardcoded times as backup in case getKhutbaTimesFromWeb() is unable to read the masjid website.
+        Adjust the number of shifts accordingly.
+     */
+    private String[] getStoredTimes() {
+        TAG = "getStoredTimes";
+        String [] goodTimes = {"11:00", "12:00", "13:00", "14:15"};
+        int numShifts = 0;
+        String str="";
+
+        try {
+            SharedPreferences sharedPreferences = getPreferences(MODE_PRIVATE);
+            numShifts = sharedPreferences.getInt("numShifts", 0);
+            str = sharedPreferences.getString("shiftTimes", null);
+        }
+        catch (Exception e)
+        {
+            Log.e(TAG,e.toString());
+        }
+        Log.i(TAG,"Received numShifts: " + numShifts +"\nstoredTimes: " + str);
+
+        if(numShifts==0 || str ==null) {
+            Log.e(TAG,"Nothing stored in sharedPreferences");
+            return null;
+        }
+        goodTimes = str.split(",");
+        Log.i(TAG,"Parsed times: " + Arrays.toString(goodTimes));
+        return goodTimes;
     }
 
     private String[] getKhutbaTimesFromWeb() {
@@ -110,21 +204,11 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
 
         } catch (Exception e) {
             Log.e(TAG,e.toString());
-            e.printStackTrace();
         }
         return shiftTimes;
     }
 
-    /*
-        Provides hardcoded times as backup in case getKhutbaTimesFromWeb() is unable to read the masjid website.
-        Adjust the number of shifts accordingly.
-     */
-    private String[] getExistingKhutbaTimes() {
-        final String[] goodTimes = {"11:00", "12:00", "13:00", "14:15"};
-        return goodTimes;
-    }
-
-    public void updateKhutbahTimes(){
+    public void refreshKhutbahTimes(){
         TAG = "refreshTimes";
 
         Thread refreshTimes = new Thread (){
@@ -133,30 +217,31 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
 
                 try{
                     String times[] = getKhutbaTimesFromWeb();
+
                     if (times != null) {
                         shiftTimes = times;
                         lastSyncTime = "" + Calendar.getInstance().getTime();
                         statusMsg = "";
 
-                        // @TODO:  Save times to local storage
-                        // TBD
+                        // Overwrite saved times in sharedPrefs
+                        storeTimesLocally(shiftTimes,lastSyncTime);
                     }
 
                     else {  // if unable to get times from website, then use stored or hardcoded times
-                        shiftTimes = null;
-
-                        // @TODO:  Retrieve times from local storage
-//                        shiftTimes = getExistingKhutbaTimes();
-//                        Log.e(TAG, "Using stored times "+ Arrays.toString(shiftTimes));
-
-                        Log.e(TAG, "JSoup unable to retrieve times from web");
-                        statusMsg = "Unable to reach IAR website. Please check network settings";
+                        Log.e(TAG, "JSoup unable to retrieve times from " + MASJID_KHUTBA_TIMES_URL);
+                        shiftTimes = getStoredTimes();
+                        if(shiftTimes!=null) {
+                            Log.i(TAG, "Using stored times " + Arrays.toString(shiftTimes));
+                            statusMsg = "Unable to reach IAR website. Using times from last sync";
+                        }
+                        else {
+                            statusMsg = "Unable to reach IAR website. Please check network settings";
+                        }
                     }
 
                 }
                 catch (Exception e){
                     Log.e(TAG,e.toString());
-                    statusMsg = "Failed to update times:" + e.toString();
                 }
 
                 // Update the status text to inform failure (or clear if we got the times)
@@ -334,50 +419,77 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
 
     @Override
     public boolean onMenuItemClick(MenuItem menuItem) {
+        TAG = "Alert Dialog";
         AlertDialog.Builder dialog = new AlertDialog.Builder(this);
         String message = "";
 
-        switch(menuItem.getItemId()){
+        switch(menuItem.getItemId()) {
             case R.id.viewTimes:
+            {
                 dialog.setTitle("View Khutbah Times");
-                if(shiftTimes==null){   //error scenario
-                    message+="There are no stored times";
-                }
-                else {
-                    message="";
-                    for(int i=0;i<shiftTimes.length;i++){
-                        message+="Shift " + (i+1) + ": " + shiftTimes[i] + "\n";
+                if (shiftTimes == null) {   //error scenario
+                    message += "There are no stored times";
+                } else {
+                    message = "";
+                    for (int i = 0; i < shiftTimes.length; i++) {
+                        message += "Shift " + (i + 1) + ": " + shiftTimes[i] + "\n";
                     }
-                    if(lastSyncTime.equals(""))
-                        message="Last web sync unsuccessful. Using default times\n\n"+message;
-                    else message+="\nLast Sync to web: "+lastSyncTime;
+                    if (lastSyncTime.equals(""))
+                        message = "Last web sync unsuccessful. Using default times\n\n" + message;
+                    else message += "\nLast Sync to web: " + lastSyncTime;
                 }
 
                 dialog.setMessage(message);
-                dialog.setNegativeButton("OK", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialogInterface, int i) {} });
+                dialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                    }
+                });
+                dialog.setPositiveButton("Sync Times from Web", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        MainActivity.this.refreshKhutbahTimes();
+                        Toast.makeText(MainActivity.this, "Syncing times from website...", Toast.LENGTH_SHORT).show();
+                    } });
                 dialog.show();
                 return true;
-            case R.id.timerLength:
-                dialog.setTitle("Timer Length");
-                message = "Current Countdown (mins): "+ (TIMER_COUNTDOWN_LENGTH/60000);
+            }
+            case R.id.timerLength: {
+                dialog.setTitle("Khutba Timer Length");
+                int currTimerLength = MainActivity.this.getTIMER_COUNTDOWN_LENGTH()/60000;
+                message = "Current Countdown (mins): "+ (currTimerLength);
+
                 final EditText edittext = new EditText(this);
+                edittext.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+                edittext.setText(""+currTimerLength);
+                edittext.setHint("minutes");
+
                 dialog.setMessage(message);
                 dialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialogInterface, int i) {
                     } });
-                /*
-                dialog.setPositiveButton("Set New Countdown", new DialogInterface.OnClickListener() {
+
+                dialog.setPositiveButton("Set New Timeout", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialogInterface, int i) {
+                        String input = edittext.getText().toString();
+                        Log.d(TAG,"onClick: Text input: " + input);
+                        try {
+                            int newtimer = Integer.parseInt(input);
+                            MainActivity.this.setNewTIMER_COUNTDOWN_LENGTH(newtimer);
+                            Toast.makeText(MainActivity.this, "Updating timer countodwn...", Toast.LENGTH_SHORT).show();
+                        }
+                        catch (NumberFormatException e){
+                            Log.e(TAG,input + " is not a number");
+                        }
                     } });
+
                 dialog.setView(edittext);
-                */
+
                 dialog.show();
                 return true;
-            case R.id.sync:
-                MainActivity.this.updateKhutbahTimes();
-                Toast.makeText(this, "Syncing times from website...", Toast.LENGTH_SHORT).show();
+            }
 
+            case R.id.exit: {
+                MainActivity.this.finish();
+            }
         }
         return false;
     }
