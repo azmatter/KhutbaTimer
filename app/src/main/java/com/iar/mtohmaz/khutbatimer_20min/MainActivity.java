@@ -32,6 +32,7 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
     private static final String FORMAT = "%02d:%02d";
     private String shift = "";
     private String nextShift = "";
+    private String statusMsg = "";
     private String lastSyncTime = "";
     TextView text1;
     TextView text2;
@@ -42,9 +43,10 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
     String shiftTimes[];
     String TAG = "KhutbaTimer";
 
-    final int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME10=600000, TIME05=305000, TIME01=60000, TIME5sec=5000;
-    int TIMER_COUNTDOWN_LENGTH = TIME20;    //default timeout
+    static final int TIME30 = 1800000, TIME20 = 1200000, TIME15=900000, TIME10=600000, TIME05=305000, TIME01=60000, TIME5sec=5000;
+    final int TIMER_COUNTDOWN_LENGTH = TIME20;    //default timeout
     final String MASJID_KHUTBA_TIMES_URL = "http://www.raleighmasjid.org/m";
+    final boolean testing = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -77,8 +79,8 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
         });
 
         setDisplay("","Khateeb Timer");
+        updateKhutbahTimes();
 
-        launchThread();
     }
 
     private void setDisplay(String txt_timer, String txt_sub) {
@@ -122,45 +124,57 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
         return goodTimes;
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
+    public void updateKhutbahTimes(){
+        TAG = "refreshTimes";
 
-        /*
-            Retrieve Khutbah times from web only when activity is starting rather than constantly
-         */
         Thread refreshTimes = new Thread (){
             @Override
             public void run() {
+
                 try{
-                    Calendar cal = Calendar.getInstance();
-                    cal.setTime(new Date());
-                    final boolean friday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY;
                     String times[] = getKhutbaTimesFromWeb();
                     if (times != null) {
                         shiftTimes = times;
                         lastSyncTime = "" + Calendar.getInstance().getTime();
-//                        setDisplay("","Next shift Friday at " + convertTo12Hour(shiftTimes[0]));
-                        text3.setText("Khutbah times last retrieved: " + lastSyncTime);
+                        statusMsg = "";
+
+                        // @TODO:  Save times to local storage
+                        // TBD
                     }
+
                     else {  // if unable to get times from website, then use stored or hardcoded times
-                        shiftTimes = getExistingKhutbaTimes();
-                        text3.setText("IAR site not reachable, using backup times");
-                        Log.e("onStart():", "JSoup unable to retrieve times from web, using hardcoded times "+ Arrays.toString(shiftTimes));
+                        shiftTimes = null;
+
+                        // @TODO:  Retrieve times from local storage
+//                        shiftTimes = getExistingKhutbaTimes();
+//                        Log.e(TAG, "Using stored times "+ Arrays.toString(shiftTimes));
+
+                        Log.e(TAG, "JSoup unable to retrieve times from web");
+                        statusMsg = "Unable to reach IAR website. Please check network settings";
                     }
 
                 }
                 catch (Exception e){
-                    Log.e("onStart():",e.toString());
+                    Log.e(TAG,e.toString());
+                    statusMsg = "Failed to update times:" + e.toString();
                 }
+
+                // Update the status text to inform failure (or clear if we got the times)
+                MainActivity.this.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        text3.setText(statusMsg);
+                        launchThread();
+                    }
+                });
             }
         };
         refreshTimes.start();
-
     }
 
     private void launchThread() {
-
+        TAG = "launchThread()";
+        Log.e(TAG, "in launch thread");
         Thread t = new Thread() {
 
             @Override
@@ -172,7 +186,7 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
                         Calendar cal = Calendar.getInstance();
                         cal.setTime(new Date());
                         final boolean friday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY;
-                        if (friday) {
+                        if (friday || testing) {
 
                             SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
                             String currentTime = sdf.format(new Date());
@@ -224,7 +238,7 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
 
     private void startSalahWarningTimer() {
         Log.d("post-Timer", "TIMER COUNTDOWN EXPIRED!  Displaying Salah! for " + shift + " Shift");
-        CountDownTimer fiveTime = new CountDownTimer(TIME05, 1000) {
+        CountDownTimer fiveTime = new CountDownTimer(!testing? TIME05:TIME01, 1000) {
             boolean blink = true;
             public void onTick(long millisUntilFinished) {
                 if (blink) {
@@ -240,7 +254,7 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
 
             public void onFinish() {
                 text2.setText("");
-                text3.setText("Khutbah times last retrieved: " + lastSyncTime);
+                text3.setText("");
             }
         }.start();
     }
@@ -252,7 +266,7 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
         if (timer == null) {
             text1.setText(shift + " Shift");
             text3.setText("");
-            timer = new CountDownTimer(TIMER_COUNTDOWN_LENGTH, 1000) {
+            timer = new CountDownTimer(!testing? TIMER_COUNTDOWN_LENGTH:TIME01, 1000) {
 
                 boolean blink = true;
                 public void onTick(long millisUntilFinished) {
@@ -361,7 +375,9 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
                 dialog.show();
                 return true;
             case R.id.sync:
-                Toast.makeText(this, "Trying to sync times from website...", Toast.LENGTH_SHORT).show();
+                MainActivity.this.updateKhutbahTimes();
+                Toast.makeText(this, "Syncing times from website...", Toast.LENGTH_SHORT).show();
+
         }
         return false;
     }
