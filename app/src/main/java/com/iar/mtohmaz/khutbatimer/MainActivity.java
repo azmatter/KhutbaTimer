@@ -96,26 +96,34 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
             public void run() {
 
                 try{
-                    String times[] = KTHelper.parseKhutbaTimesFromWeb();
+                    // Step 1 - try the API first
+                    String [] times = KTHelper.parseKhutbaTimesFromAPI();
 
+                    // Step 2 - if the API fails for some reason, try to scrap the website
+                    if (times == null){
+                        times = KTHelper.parseKhutbaTimesFromWeb();
+                    }
+
+                    // if Step 1 or 2 succeeded, then we're good. Store the times in sharedPrefs
                     if (times != null) {
                         shiftTimes = times;
                         lastSyncTime = "" + Calendar.getInstance().getTime();
                         statusMsg = "";
-
-                        // Overwrite saved times in sharedPrefs
                         KTHelper.storeTimesLocally(shiftTimes,lastSyncTime);
                     }
 
-                    else {  // if unable to get times from website, then use stored or hardcoded times
-                        Log.e(TAG, "JSoup unable to retrieve times from " + KTHelper.MASJID_KHUTBA_TIMES_URL);
+                    // Step 3 - as a last resort, try to recall previously stored times if they exist
+                    else {
+                        Log.e(TAG, "Unable to get times from\nAPI URL: " + KTHelper.MASJID_KHUTBA_TIMES_API_URL
+                                + "\nWeb URL: " + KTHelper.MASJID_KHUTBA_TIMES_URL
+                                + "\nAttempting to use stored times");
                         shiftTimes = KTHelper.getStoredTimes();
                         if(shiftTimes!=null) {
-                            Log.i(TAG, "Using stored times " + Arrays.toString(shiftTimes));
-                            statusMsg = "Unable to reach IAR website. Using times from last sync";
+                            Log.i(TAG, "Retrieved stored times " + Arrays.toString(shiftTimes));
+                            statusMsg = "Unable to sync times with IAR website. Using times from last sync";
                         }
                         else {
-                            statusMsg = "Unable to reach IAR website. Please check network settings";
+                            statusMsg = "Unable to sync times with IAR website. Please check network settings";
                         }
                     }
 
@@ -158,6 +166,7 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
 
                             for (int i = 0; i < shiftTimes.length; i++) {
 
+                                // @TODO:  Refactor this to be more flexible w/ # of shifts
                                 if (shiftTimes[i].equals(currentTime)) {
                                     if (i == 0) {
                                         shift = "First";
