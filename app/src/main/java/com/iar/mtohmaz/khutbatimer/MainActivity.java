@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.CountDownTimer;
 import android.os.Bundle;
@@ -96,13 +98,11 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
             public void run() {
 
                 try{
-                    // Step 1 - try the API first
-                    String [] times = KTHelper.parseKhutbaTimesFromAPI();
+                    // Step 1 - try the API first (no longer works as of Aug 2021 new IAR site launch)
+                    //String [] times = KTHelper.parseKhutbaTimesFromAPI();
 
                     // Step 2 - if the API fails for some reason, try to scrap the website
-                    if (times == null){
-                        times = KTHelper.parseKhutbaTimesFromWeb();
-                    }
+                    String [] times = KTHelper.parseKhutbaTimesFromWeb();
 
                     // if Step 1 or 2 succeeded, then we're good. Store the times in sharedPrefs
                     if (times != null) {
@@ -170,20 +170,21 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
                                 if (shiftTimes[i].equals(currentTime)) {
                                     if (i == 0) {
                                         shift = "First";
-                                        nextShift = "Next shift at " + KTHelper.convertTo12Hour(shiftTimes[1]);
                                     }
                                     else if (i == 1) {
                                         shift = "Second";
-                                        nextShift = "Next shift at " + KTHelper.convertTo12Hour(shiftTimes[2]);
                                     }
                                     else if (i == 2 ){
                                         shift = "Third";
-                                        nextShift = "Next shift at " + KTHelper.convertTo12Hour(shiftTimes[3]);
                                     }
                                     else {
                                         shift = "Fourth";
-                                        nextShift = "Khateeb Timer";
                                     }
+                                    if (i < shiftTimes.length-1){
+                                        nextShift = "Next shift at " + KTHelper.convertTo12Hour(shiftTimes[i+1]);
+                                    }
+                                    else nextShift = "Khateeb Timer";
+
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
@@ -295,6 +296,8 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
             case R.id.viewTimes:
             {
                 dialog.setTitle("View Khutbah Times");
+
+                // Get the times
                 if (shiftTimes == null) {   //error scenario
                     message += "There are no stored times";
                 } else {
@@ -307,7 +310,17 @@ public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickL
                     else message += "\nLast Sync to web: " + lastSyncTime;
                 }
 
+                // Get version number
+                PackageInfo pkgInfo = null;
+                try {
+                    pkgInfo = MainActivity.this.getPackageManager().getPackageInfo(MainActivity.this.getPackageName(),0);
+                } catch (PackageManager.NameNotFoundException e) {
+                    Log.e(TAG,"Unable to get app version code: "+e.toString());
+                }
+                message +="\nApp version: "+pkgInfo.versionName + "";
+
                 dialog.setMessage(message);
+
                 dialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialogInterface, int i) {
                     }

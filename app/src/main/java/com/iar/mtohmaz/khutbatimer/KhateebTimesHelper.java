@@ -31,7 +31,7 @@ public class KhateebTimesHelper {
             TIME5sec=5000;      // 5 seconds
     private int TIMER_COUNTDOWN_LENGTH;
     private String lastSyncTime = "";
-    public final String MASJID_KHUTBA_TIMES_URL = "http://www.raleighmasjid.org/m";
+    public final String MASJID_KHUTBA_TIMES_URL = "http://www.raleighmasjid.org/";
     public final String MASJID_KHUTBA_TIMES_API_URL = "https://raleighmasjid.org/API/fridayPrayer";
 
 
@@ -92,7 +92,7 @@ public class KhateebTimesHelper {
 
         try {
             Document doc = Jsoup.connect(MASJID_KHUTBA_TIMES_URL).get();
-            Elements list = doc.getElementsByClass("time");
+            Elements list = doc.getElementsByClass("prayerschedule-title-time");
 
             shiftTimes = new String[list.size()];
             for (int i = 0; i < list.size(); i++) {
@@ -122,6 +122,7 @@ public class KhateebTimesHelper {
         return shiftTimes;
     }
 
+    // @TODO: this assumes no shifts scheduled before 10am. may want to refactor
     public int convertTo24Hour(int time) {
         if (time < 10) {
             return time + 12;
