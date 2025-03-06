@@ -1,30 +1,49 @@
 package com.iar.mtohmaz.khutbatimer;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.CountDownTimer;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.MenuItem;
 import android.view.View;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.PopupMenu;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.select.Elements;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements PopupMenu.OnMenuItemClickListener {
 
     private static final String FORMAT = "%02d:%02d";
     private String shift = "";
     private String nextShift = "";
+    private String statusMsg = "";
     TextView text1;
     TextView text2;
+    TextView text3;
+    Button menuButton;
+    PopupMenu popupMenu;
     CountDownTimer timer = null;
+
+    String TAG = "KhutbaTimer";
     String shiftTimes[];
+    KhateebTimesHelper KTHelper;
+    private int TIMER_COUNTDOWN_LENGTH;
+    private String lastSyncTime = "";
+    final boolean testing = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -38,48 +57,97 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(R.layout.activity_main);
 
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         text1 = (TextView)findViewById(R.id.textView1);
-
         text2 = (TextView)findViewById(R.id.textView2);
+        text3 = (TextView)findViewById(R.id.textView3);
+        menuButton = (Button)findViewById(R.id.menuButton);
+        menuButton.setBackgroundColor(Color.TRANSPARENT);
+        menuButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
 
-        setDisplay();
+                popupMenu = new PopupMenu(MainActivity.this, v);
+                popupMenu.setOnMenuItemClickListener(MainActivity.this);
+                popupMenu.inflate(R.menu.app_menu);
+                popupMenu.show();
+            }
+        });
 
-        launchThread();
+        setDisplay("","Khateeb Timer");
+
+        //Initialize instance variables
+        KTHelper = new KhateebTimesHelper(this);
+        TIMER_COUNTDOWN_LENGTH = KTHelper.getTIMER_COUNTDOWN_LENGTH();
+        lastSyncTime = KTHelper.getLastSyncTime();
+        refreshKhutbahTimes();
+
     }
 
-    private void setDisplay() {
-        text2.setText("");
-        text1.setText("Khateeb Timer");
+    private void setDisplay(String txt_timer, String txt_sub) {
+        text2.setText(txt_timer);
+        text1.setText(txt_sub);
     }
 
-    private String[] getKhutbaTimes() {
+    public void refreshKhutbahTimes(){
+        TAG = "refreshTimes";
 
-        String shiftTimes[] = new String[3];
-        try {
-            Document doc = Jsoup.connect("http://www.raleighmasjid.org").get();
-            Elements list = doc.getElementsByClass("time");
-            int firstHour = Integer.parseInt(list.get(0).text().substring(7, 9).replaceAll(":", ""));
-            firstHour = convertTo24Hour(firstHour);
-            String firstMinute = list.get(0).text().substring(9, 12).replaceAll(":", "");
-            int secondHour = Integer.parseInt(list.get(1).text().substring(7, 9).replaceAll(":", ""));
-            secondHour = convertTo24Hour(secondHour);
-            String secondMinute = list.get(1).text().substring(9, 12).replaceAll("\\s+","");
-            int thirdHour = Integer.parseInt(list.get(2).text().substring(7, 9).replaceAll(":", ""));
-            thirdHour = convertTo24Hour(thirdHour);
-            String thirdMinute = list.get(2).text().substring(9, 12).replaceAll("\\s+", "");
-            shiftTimes[0] = firstHour + ":" + firstMinute;
-            shiftTimes[1] = secondHour + ":" + secondMinute;
-            shiftTimes[2] = thirdHour + ":" + thirdMinute;
-        } catch (Exception e) {
-            shiftTimes = null;
-            e.printStackTrace();
-        }
-        return shiftTimes;
+        Thread refreshTimes = new Thread (){
+            @Override
+            public void run() {
+
+                try{
+                    // Step 1 - try the API first (no longer works as of Aug 2021 new IAR site launch)
+                    //String [] times = KTHelper.parseKhutbaTimesFromAPI();
+
+                    // Step 2 - if the API fails for some reason, try to scrap the website
+                    String [] times = KTHelper.parseKhutbaTimesFromWeb();
+
+                    // if Step 1 or 2 succeeded, then we're good. Store the times in sharedPrefs
+                    if (times != null) {
+                        shiftTimes = times;
+                        lastSyncTime = "" + Calendar.getInstance().getTime();
+                        statusMsg = "";
+                        KTHelper.storeTimesLocally(shiftTimes,lastSyncTime);
+                    }
+
+                    // Step 3 - as a last resort, try to recall previously stored times if they exist
+                    else {
+                        Log.e(TAG, "Unable to get times from\nAPI URL: " + KTHelper.MASJID_KHUTBA_TIMES_API_URL
+                                + "\nWeb URL: " + KTHelper.MASJID_KHUTBA_TIMES_URL
+                                + "\nAttempting to use stored times");
+                        shiftTimes = KTHelper.getStoredTimes();
+                        if(shiftTimes!=null) {
+                            Log.i(TAG, "Retrieved stored times " + Arrays.toString(shiftTimes));
+                            statusMsg = "Unable to sync times with IAR website. Using times from last sync";
+                        }
+                        else {
+                            statusMsg = "Unable to sync times with IAR website. Please check network settings";
+                        }
+                    }
+
+                }
+                catch (Exception e){
+                    Log.e(TAG,e.toString());
+                }
+
+                // Update the status text to inform failure (or clear if we got the times)
+                MainActivity.this.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        text3.setText(statusMsg);
+                        launchThread();
+                    }
+                });
+            }
+        };
+        refreshTimes.start();
     }
 
     private void launchThread() {
-
+        TAG = "launchThread()";
+        Log.e(TAG, "in launch thread");
         Thread t = new Thread() {
 
             @Override
@@ -91,30 +159,32 @@ public class MainActivity extends Activity {
                         Calendar cal = Calendar.getInstance();
                         cal.setTime(new Date());
                         final boolean friday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY;
-                        if (friday) {
+                        if (friday || testing) {
 
-                            String times[] = getKhutbaTimes();
-
-                            if (times != null) {
-                                shiftTimes = times;
-                            }
                             SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
                             String currentTime = sdf.format(new Date());
 
                             for (int i = 0; i < shiftTimes.length; i++) {
+
+                                // @TODO:  Refactor this to be more flexible w/ # of shifts
                                 if (shiftTimes[i].equals(currentTime)) {
                                     if (i == 0) {
                                         shift = "First";
-                                        nextShift = "Next shift at " + convertTo12Hour(shiftTimes[1]);
                                     }
                                     else if (i == 1) {
                                         shift = "Second";
-                                        nextShift = "Next shift at " + convertTo12Hour(shiftTimes[2]);
+                                    }
+                                    else if (i == 2 ){
+                                        shift = "Third";
                                     }
                                     else {
-                                        shift = "Third";
-                                        nextShift = "Khateeb Timer";
+                                        shift = "Fourth";
                                     }
+                                    if (i < shiftTimes.length-1){
+                                        nextShift = "Next shift at " + KTHelper.convertTo12Hour(shiftTimes[i+1]);
+                                    }
+                                    else nextShift = "Khateeb Timer";
+
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
@@ -132,6 +202,8 @@ public class MainActivity extends Activity {
                             .getLaunchIntentForPackage(getBaseContext().getPackageName());
                     i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(i);
+                } catch (Exception e) {
+                    Log.e("launchThread","Ran into unknown exception: "+ e.toString());
                 }
             }
         };
@@ -139,8 +211,9 @@ public class MainActivity extends Activity {
         t.start();
     }
 
-    private void startFiveTimer() {
-        CountDownTimer fiveTime = new CountDownTimer(300000, 1000) {
+    private void startSalahWarningTimer() {
+        Log.d("post-Timer", "TIMER COUNTDOWN EXPIRED!  Displaying Salah! for " + shift + " Shift");
+        CountDownTimer fiveTime = new CountDownTimer(!testing? KhateebTimesHelper.TIME05:KhateebTimesHelper.TIME01, 1000) {
             boolean blink = true;
             public void onTick(long millisUntilFinished) {
                 if (blink) {
@@ -156,23 +229,29 @@ public class MainActivity extends Activity {
 
             public void onFinish() {
                 text2.setText("");
+                text3.setText("");
             }
         }.start();
     }
 
 
     private void startTimer() {
+        Log.d("startTimer", "TIMER COUNTDOWN STARTED! " + shift + " Shift, Mins="+ (TIMER_COUNTDOWN_LENGTH/60000));
 
         if (timer == null) {
             text1.setText(shift + " Shift");
-            timer = new CountDownTimer(1800000, 1000) {
+            text3.setText("");
+            timer = new CountDownTimer(!testing? TIMER_COUNTDOWN_LENGTH: KhateebTimesHelper.TIME01, 1000) {
 
                 boolean blink = true;
                 public void onTick(long millisUntilFinished) {
+
+                    // When 5 mins remaining, turn time text red
                     if (millisUntilFinished <= 300000) {
                         text2.setTextColor(0xffff0000);
                     }
 
+                    // When 1 min remaining, blink time text
                     if (millisUntilFinished <= 60000) {
                         if (blink) {
                             text2.setText("" + String.format(FORMAT,
@@ -200,32 +279,100 @@ public class MainActivity extends Activity {
                 public void onFinish() {
                     timer = null;
                     text2.setTextColor(0xffffffff);
-                    startFiveTimer();
+                    startSalahWarningTimer();
                     shift = "";
                 }
             }.start();
         }
     }
 
-    private int convertTo24Hour(int time) {
-        if (time < 10) {
-            return time + 12;
-        }
-        return time;
-    }
+    @Override
+    public boolean onMenuItemClick(MenuItem menuItem) {
+        TAG = "Alert Dialog";
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this);
+        String message = "";
 
-    private String convertTo12Hour(String time) {
-        String ret = "";
-        try {
-            String _24HourTime = time;
-            SimpleDateFormat _24HourSDF = new SimpleDateFormat("HH:mm");
-            SimpleDateFormat _12HourSDF = new SimpleDateFormat("hh:mm a");
-            Date _24HourDt = _24HourSDF.parse(_24HourTime);
-            ret = _12HourSDF.format(_24HourDt);
-        } catch (Exception e) {
-            e.printStackTrace();
+        switch(menuItem.getItemId()) {
+            case R.id.viewTimes:
+            {
+                dialog.setTitle("View Khutbah Times");
+
+                // Get the times
+                if (shiftTimes == null) {   //error scenario
+                    message += "There are no stored times";
+                } else {
+                    message = "";
+                    for (int i = 0; i < shiftTimes.length; i++) {
+                        message += "Shift " + (i + 1) + ": " + shiftTimes[i] + "\n";
+                    }
+                    if (lastSyncTime.equals(""))
+                        message = "Last web sync unsuccessful. Using default times\n\n" + message;
+                    else message += "\nLast Sync to web: " + lastSyncTime;
+                }
+
+                // Get version number
+                PackageInfo pkgInfo = null;
+                try {
+                    pkgInfo = MainActivity.this.getPackageManager().getPackageInfo(MainActivity.this.getPackageName(),0);
+                } catch (PackageManager.NameNotFoundException e) {
+                    Log.e(TAG,"Unable to get app version code: "+e.toString());
+                }
+                message +="\nApp version: "+pkgInfo.versionName + "";
+
+                dialog.setMessage(message);
+
+                dialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                    }
+                });
+                dialog.setPositiveButton("Sync Times from Web", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        MainActivity.this.refreshKhutbahTimes();
+                        Toast.makeText(MainActivity.this, "Syncing times from website...", Toast.LENGTH_SHORT).show();
+                    } });
+                dialog.show();
+                return true;
+            }
+            case R.id.timerLength: {
+                dialog.setTitle("Khutba Timer Length");
+                int currTimerLength = MainActivity.this.KTHelper.getTIMER_COUNTDOWN_LENGTH()/60000;
+                message = "Current Countdown (mins): "+ (currTimerLength);
+
+                final EditText edittext = new EditText(this);
+                edittext.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+                edittext.setText(""+currTimerLength);
+                edittext.setHint("minutes");
+
+                dialog.setMessage(message);
+                dialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                    } });
+
+                dialog.setPositiveButton("Set New Timeout", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        String input = edittext.getText().toString();
+                        Log.d(TAG,"onClick: Text input: " + input);
+                        try {
+                            int newtimer = Integer.parseInt(input);
+                            MainActivity.this.KTHelper.setNewTIMER_COUNTDOWN_LENGTH(newtimer);
+                            Toast.makeText(MainActivity.this, "Updating timer countodwn...", Toast.LENGTH_SHORT).show();
+                        }
+                        catch (NumberFormatException e){
+                            Log.e(TAG,input + " is not a number");
+                        }
+                    } });
+
+                dialog.setView(edittext);
+
+                dialog.show();
+                return true;
+            }
+
+            case R.id.exit: {
+                MainActivity.this.finish();
+            }
         }
-        return ret;
+        return false;
     }
 }
 
